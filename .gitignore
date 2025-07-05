@@ -1,0 +1,7 @@
+﻿**obj
+**bin
+**.vs
+**obj/
+**bin/
+.container/
+DistributedFileStorage/Migrations

@@ -1,0 +1,125 @@
+x-common-env: &common-env
+  TZ: Asia/Bangkok
+  ASPNETCORE_ENVIRONMENT: Development
+  ConnectionStrings__DefaultConnection: Server=mariadb;Port=3306;Database=file_storage;User=appuser;Password=apppassword;
+  Redis__ConnectionString: redis:6379
+  RabbitMq__AmqpUri: amqp://guest:guest@rabbitmq:5672/
+
+x-common-build: &common-build
+  context: .
+  dockerfile: DistributedFileStorage/Dockerfile
+
+x-common-depends: &common-depends
+  mariadb:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  rabbitmq:
+    condition: service_healthy
+
+services:
+  dfs-node-1:
+    build: *common-build
+    container_name: dfs-node-1
+    environment:
+      <<: *common-env
+      NodeId: dfs-node-1
+      StoragePath: /data/uploads
+    volumes:
+      - ./.container/node-1:/data/uploads
+    ports:
+      - "8081:80"
+    depends_on: *common-depends
+
+  dfs-node-2:
+    build: *common-build
+    container_name: dfs-node-2
+    environment:
+      <<: *common-env
+      NodeId: dfs-node-2
+      StoragePath: /data/uploads
+    volumes:
+      - ./.container/node-2:/data/uploads
+    ports:
+      - "8082:80"
+    depends_on: *common-depends
+
+  dfs-node-3:
+    build: *common-build
+    container_name: dfs-node-3
+    environment:
+      <<: *common-env
+      NodeId: dfs-node-3
+      StoragePath: /data/uploads
+    volumes:
+      - ./.container/node-3:/data/uploads
+    ports:
+      - "8083:80"
+    depends_on: *common-depends
+
+  mariadb:
+    image: mariadb:11.8.2
+    container_name: mariadb
+    restart: always
+    environment:
+      TZ: Asia/Bangkok
+      MARIADB_ROOT_PASSWORD: rootpassword
+      MARIADB_DATABASE: file_storage
+      MARIADB_USER: appuser
+      MARIADB_PASSWORD: apppassword
+      MARIADB_AUTO_UPGRADE: 1
+      MARIADB_DISABLE_UPGRADE_BACKUP: 0
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ./initdb:/docker-entrypoint-initdb.d
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mariadb-admin ping -h 127.0.0.1 -u root -p$$MARIADB_ROOT_PASSWORD",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    environment:
+      TZ: Asia/Bangkok
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    hostname: rabbitmq
+    container_name: rabbitmq
+    restart: always
+    volumes:
+      - rabbitmq-lib:/var/lib/rabbitmq/
+      - rabbitmq-log:/var/log/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 30s
+      retries: 3
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      TZ: Asia/Bangkok
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
+volumes:
+  mariadb-data:
+  rabbitmq-lib:
+  rabbitmq-log:
